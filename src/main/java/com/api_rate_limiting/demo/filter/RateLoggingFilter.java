@@ -10,6 +10,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 @Component
+
 public class RateLoggingFilter extends OncePerRequestFilter {
 
     @Override
@@ -20,9 +21,15 @@ public class RateLoggingFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         if(path.startsWith("/api/")){
-            System.out.println("Incoming Request:" + request.getMethod() + ' ' + path);
+            // System.out.println("Incoming Request:" + request.getMethod() + ' ' + path);
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("text/plain");
+            response.getWriter().write("Unauthorized Access");
+            return;
         }
+        
 
         filterChain.doFilter(request,response);
+        
     }
 }
