@@ -11,9 +11,9 @@ public class HelloWorld {
         return "hello";
     }
 
-    @GetMapping("/hello"){
-        public String Hello(){
+    @GetMapping("/hello")
+        public String HelloPart2(){
             return "hello";
         }
     }
-}
+

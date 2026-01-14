@@ -19,12 +19,21 @@ public class RateLoggingFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String path = request.getRequestURI();
+        String allowedKey = "test123";
 
-        if(path.startsWith("/api/")){
+        String apiKey = request.getHeader("X-API-Key");
+        if(apiKey == null || apiKey.trim().isEmpty()/*path.startsWith("/api/")*/){
             // System.out.println("Incoming Request:" + request.getMethod() + ' ' + path);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("text/plain");
-            response.getWriter().write("Unauthorized Access");
+            response.getWriter().write("Missing X-API-Key");
+            return;
+        }
+
+        if(!apiKey.equals(allowedKey)){
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("text/plain");
+            response.getWriter().write("Invalid X-API-Key");
             return;
         }
         
