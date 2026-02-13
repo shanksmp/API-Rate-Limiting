@@ -39,7 +39,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
         if (!apiKeyService.isValid(apiKey)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("text/Plain");
+            response.setContentType("text/plain");
             response.getWriter().write("Invalid API Key");
             return;
         }

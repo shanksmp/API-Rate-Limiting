@@ -8,8 +8,6 @@ public class FixedWindowRateLimiting {
     public RateLimitDecision check (String apiKey){
         long now = System.currentTimeMillis();
 
-
-
         Bucket bucket = requestTimes.computeIfAbsent(apiKey,
                 k-> new Bucket(now));
 
@@ -20,8 +18,6 @@ public class FixedWindowRateLimiting {
                 bucket.windowStart = now;
                 bucket.count.set(0);
             }
-
-
 
             if(bucket.count.get() < RateLimitConfig.LIMIT){
                 int newCount = bucket.count.incrementAndGet();
