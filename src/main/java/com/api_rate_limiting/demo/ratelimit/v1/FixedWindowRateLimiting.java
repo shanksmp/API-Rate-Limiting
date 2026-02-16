@@ -1,6 +1,7 @@
 package com.api_rate_limiting.demo.ratelimit.v1;
 
 import java.util.concurrent.ConcurrentHashMap;
+
 public class FixedWindowRateLimiting {
 
     private final ConcurrentHashMap <String, Bucket> requestTimes = new ConcurrentHashMap<>();

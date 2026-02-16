@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
-@Component
+//@Component
 
 public class RateLimitingFilter extends OncePerRequestFilter {
 
@@ -57,10 +57,6 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             response.getWriter().write("Too Many Requests");
             return;
         }
-
-
         filterChain.doFilter(request, response);
-
-
     }
 }

@@ -1,7 +1,6 @@
 package com.api_rate_limiting.demo.ratelimit.v2;
 
 public class RateLimitDecision {
-
     private final boolean allowed;
     private final long remaining;
     private final long retryAfterSeconds;
