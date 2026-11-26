@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit + integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test (Testcontainers starts Redis)
+        run: ./gradlew test
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+
+  e2e:
+    name: Full stack + distributed correctness
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate secrets
+        run: |
+          ./scripts/init-env.sh
+          mkdir -p loadtest/results && chmod 777 loadtest/results   # k6 runs as a non-root user
+      - name: Start stack (3 app replicas behind NGINX)
+        run: docker compose up -d --build --wait
+      - name: k6 correctness (300 concurrent requests, exactly 10 allowed)
+        run: docker compose --profile loadtest run --rm k6 run /scripts/correctness.js
+      - name: k6 smoke throughput
+        run: docker compose --profile loadtest run --rm -e RATE=500 -e DURATION=20s -e KEYS=20 k6 run /scripts/throughput.js
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+      - name: Tear down
+        if: always()
+        run: docker compose --profile loadtest down -v

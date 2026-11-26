@@ -1,0 +1,10 @@
+.git
+.gradle
+.idea
+build
+deploy
+loadtest
+scripts
+*.md
+.env
+.env.*

@@ -1,0 +1,30 @@
+groups:
+  - name: rate-limiter
+    rules:
+      - alert: RedisCircuitBreakerOpen
+        expr: max(resilience4j_circuitbreaker_state{name="redis-rate-limiter",state="open"}) == 1
+        for: 30s
+        labels: {severity: page}
+        annotations:
+          summary: Rate limiter cannot reach Redis and is failing open/closed
+
+      - alert: RateLimiterDegraded
+        expr: sum(rate(ratelimiter_decisions_total{outcome=~"fail_open|fail_closed"}[1m])) > 0
+        for: 1m
+        labels: {severity: warn}
+        annotations:
+          summary: Requests are being decided without Redis
+
+      - alert: RateLimitCheckSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(ratelimiter_check_seconds_bucket[1m]))) > 0.025
+        for: 2m
+        labels: {severity: warn}
+        annotations:
+          summary: p99 rate limit decision latency above 25ms
+
+      - alert: HighAuthFailureRate
+        expr: sum(rate(ratelimiter_auth_failures_total[1m])) > 50
+        for: 2m
+        labels: {severity: warn}
+        annotations:
+          summary: Many requests with missing or invalid API keys (possible key guessing)
