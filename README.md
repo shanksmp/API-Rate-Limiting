@@ -140,6 +140,23 @@ without the limiter.
 - **Correctness under load:** `correctness.js` sends 300 requests at once with one `free` key. NGINX spreads them over all 3 instances (about 100 each), and exactly 10 succeed.
 - **Redis outage under load:** at 2,000 req/s, Redis was stopped for 15s, then started again. All requests returned 200, p99 stayed at 1.7 ms, and 0 errors were reported. Each instance's breaker opened within a second, probed every 5s, and closed once Redis was back.
 
+**More CPU for the VM.** Same Mac (Apple M5: 4 performance and 6 efficiency cores), same stack,
+limited endpoint, warm JVMs, k6 still inside the VM:
+
+| VM vCPUs | 12k req/s p99 | 16k p99 | 20k p99 | 24k p99 | Dropped at 24k |
+|---:|---:|---:|---:|---:|---:|
+| 6 | 5.2 ms | 25.6 ms | 114–217 ms | not run | not run |
+| 8 | 3.8 ms | 6.7 ms | **14.6 ms** | 38.3 ms | 1,260 |
+| 10 | 17.7 ms* | 7.1 ms | 11.0 ms | 30.1 ms | 4,537 |
+
+\* JVMs not fully warm after the restart.
+
+Going from 6 to 8 vCPUs moved the knee from about 16k to about 24k req/s. Going from 8 to 10 barely
+helped, because the last cores are efficiency cores and the VM starts competing with macOS itself.
+So it was CPU starvation, not the code. Running k6 natively on macOS was worse: Colima's port
+forwarder becomes the bottleneck (2.6% connection resets at 12k), so keep the load generator next
+to the stack, or on its own machine.
+
 **Warm up first.** Right after a restart the JVMs haven't JIT-compiled the hot path yet. A
 20k run on cold JVMs reached only 14k req/s with p99 over 1 s; the same run a minute later
 reached 19.8k req/s. Run a short load at low rate before measuring.

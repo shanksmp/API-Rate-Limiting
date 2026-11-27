@@ -13,6 +13,7 @@ const RATE = parseInt(__ENV.RATE || '2000', 10);
 const DURATION = __ENV.DURATION || '60s';
 const KEYS = parseInt(__ENV.KEYS || '100', 10);
 const TARGET = __ENV.TARGET || 'limited';
+const RESULTS_DIR = __ENV.RESULTS_DIR || '/results';
 
 export const options = {
   discardResponseBodies: true,
@@ -72,7 +73,7 @@ export function handleSummary(data) {
   };
   return {
     stdout: JSON.stringify(line) + '\n',
-    [`/results/${TARGET}-${RATE}.json`]: JSON.stringify(line),
+    [`${RESULTS_DIR}/${TARGET}-${RATE}.json`]: JSON.stringify(line),
   };
 }
 
