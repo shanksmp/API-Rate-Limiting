@@ -43,6 +43,7 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(ApiRateLimitFilter.class);
 
     private final ApiKeyService apiKeys;
+    private final AuthFailureThrottle authThrottle;
     private final PlanRegistry plans;
     private final RateLimitService rateLimits;
     private final ProblemWriter problems;
@@ -50,9 +51,11 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
     private final List<PathPattern> publicPaths;
     private final MeterRegistry meters;
 
-    public ApiRateLimitFilter(ApiKeyService apiKeys, PlanRegistry plans, RateLimitService rateLimits,
-                              ProblemWriter problems, RateLimitProperties props, MeterRegistry meters) {
+    public ApiRateLimitFilter(ApiKeyService apiKeys, AuthFailureThrottle authThrottle, PlanRegistry plans,
+                              RateLimitService rateLimits, ProblemWriter problems, RateLimitProperties props,
+                              MeterRegistry meters) {
         this.apiKeys = apiKeys;
+        this.authThrottle = authThrottle;
         this.plans = plans;
         this.rateLimits = rateLimits;
         this.problems = problems;
@@ -74,9 +77,18 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Real client address: Tomcat takes it from X-Forwarded-For, which NGINX overwrites (never appends)
+        String client = request.getRemoteAddr();
+        if (authThrottle.isBlocked(client)) {
+            Counter.builder("ratelimiter.auth.failures").tag("reason", "throttled").register(meters).increment();
+            response.setHeader("Retry-After", Long.toString(authThrottle.retryAfterSeconds(client)));
+            problems.write(response, HttpStatus.TOO_MANY_REQUESTS, "Too many failed authentication attempts");
+            return;
+        }
+
         String secret = request.getHeader(headerName);
         if (secret == null || secret.isBlank()) {
-            reject(response, "missing", "Missing API key in the " + headerName + " header");
+            reject(response, client, "missing", "Missing API key in the " + headerName + " header");
             return;
         }
 
@@ -91,7 +103,7 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
         }
         if (key.isEmpty()) {
             // Same answer for unknown, malformed and revoked keys: don't help anyone enumerate keys
-            reject(response, "invalid", "Invalid API key");
+            reject(response, client, "invalid", "Invalid API key");
             return;
         }
 
@@ -132,7 +144,9 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
         return false;
     }
 
-    private void reject(HttpServletResponse response, String reason, String detail) throws IOException {
+    private void reject(HttpServletResponse response, String client, String reason, String detail)
+            throws IOException {
+        authThrottle.recordFailure(client);
         Counter.builder("ratelimiter.auth.failures").tag("reason", reason).register(meters).increment();
         response.setHeader("WWW-Authenticate", "ApiKey header=\"" + headerName + "\"");
         problems.write(response, HttpStatus.UNAUTHORIZED, detail);

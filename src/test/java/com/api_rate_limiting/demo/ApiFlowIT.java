@@ -2,7 +2,7 @@ package com.api_rate_limiting.demo;
 
 import com.api_rate_limiting.demo.apikey.ApiKeyHasher;
 import com.api_rate_limiting.demo.apikey.ApiKeyService;
-import com.api_rate_limiting.demo.support.RedisTestSupport;
+import com.api_rate_limiting.demo.support.AbstractRedisIT;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,9 +15,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -29,17 +26,10 @@ import static org.awaitility.Awaitility.await;
 /** End to end through the real HTTP stack, a real Redis, and the real config. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "management.server.port=0")
-@ActiveProfiles("test")
 @AutoConfigureObservability // Boot disables metrics export in tests by default
-class ApiFlowIT {
+class ApiFlowIT extends AbstractRedisIT {
 
     static final String ADMIN_TOKEN = "test-admin-token-0123456789abcdef0123";
-
-    @DynamicPropertySource
-    static void redis(DynamicPropertyRegistry registry) {
-        registry.add("spring.data.redis.host", RedisTestSupport.REDIS::getHost);
-        registry.add("spring.data.redis.port", () -> RedisTestSupport.REDIS.getMappedPort(6379));
-    }
 
     @LocalServerPort
     int port;
@@ -138,6 +128,33 @@ class ApiFlowIT {
         assertThat(createKey("<script>", "free").getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(admin().get().uri("/admin/keys/{id}", "not-an-id").retrieve().toBodilessEntity().getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(admin().get().uri("/admin/keys?limit=0").retrieve().toBodilessEntity().getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(admin().get().uri("/admin/keys?cursor=../../x").retrieve().toBodilessEntity().getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    /** Review finding 6: listing is paginated instead of silently stopping at a fixed count. */
+    @Test
+    void listingIsPaginated() {
+        java.util.Set<String> created = new java.util.HashSet<>();
+        for (int i = 0; i < 5; i++) {
+            created.add(createKey("page-" + i, "free").getBody().get("id").asText());
+        }
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        String cursor = null;
+        int pages = 0;
+        do {
+            String uri = "/admin/keys?limit=2" + (cursor == null ? "" : "&cursor=" + cursor);
+            JsonNode page = admin().get().uri(uri).retrieve().body(JsonNode.class);
+            assertThat(page.get("items").size()).isLessThanOrEqualTo(2);
+            page.get("items").forEach(k -> seen.add(k.get("id").asText()));
+            cursor = page.hasNonNull("nextCursor") ? page.get("nextCursor").asText() : null;
+            pages++;
+        } while (cursor != null && pages < 10_000);
+
+        assertThat(seen).doesNotHaveDuplicates().containsAll(created);
+        assertThat(seen).allMatch(id -> id.startsWith("key_"));
     }
 
     @Test

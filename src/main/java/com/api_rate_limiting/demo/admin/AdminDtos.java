@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.util.List;
 
 final class AdminDtos {
 
@@ -26,6 +27,10 @@ final class AdminDtos {
         static KeyResponse of(ApiKey k) {
             return new KeyResponse(k.id(), k.owner(), k.plan(), k.status().name(), k.createdAt());
         }
+    }
+
+    /** @param nextCursor pass as {@code cursor} to get the next page; absent on the last page */
+    record KeyPageResponse(List<KeyResponse> items, String nextCursor) {
     }
 
     /** The only response that ever contains the secret. */

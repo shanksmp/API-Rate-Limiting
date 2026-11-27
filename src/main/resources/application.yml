@@ -20,6 +20,9 @@ spring:
 server:
   port: 8080
   shutdown: graceful
+  # Take the client address from X-Forwarded-For, but only when the request comes from a private-network
+  # proxy (Tomcat's default trusted range). NGINX overwrites the header, so clients can't spoof it.
+  forward-headers-strategy: native
   error:
     include-message: never
     include-stacktrace: never
@@ -85,10 +88,14 @@ ratelimit:
       refill-tokens: 1000000
       refill-period: 1s
   api-key-cache:
-    refresh-after: 30s         # upper bound on how stale a key's plan/status can be if a pub/sub message is missed
-    expire-after: 10m          # how long a cached key survives a Redis outage
+    refresh-after: 30s         # a cached key is re-read on its first use after this, catching any missed pub/sub message
+    expire-after: 10m          # how long a cached key keeps working through a Redis outage (revoked or not)
     negative-ttl: 30s
     max-size: 100000
+  revoked-key-retention: 30d   # revoked keys stay visible to admins, then Redis deletes them
+  auth-failure-throttle:       # per client address, per instance; exhausted clients skip the Redis lookup
+    capacity: 50
+    refill-per-second: 5
   circuit-breaker:
     failure-rate-threshold: 50
     sliding-window-size: 50

@@ -29,6 +29,9 @@ public record RateLimitProperties(
         @NotBlank String defaultPlan,
         @NotEmpty Map<String, @Valid PlanProperties> plans,
         @Valid @NotNull ApiKeyCache apiKeyCache,
+        /* How long revoked keys are kept (for audit) before Redis deletes them. */
+        @NotNull Duration revokedKeyRetention,
+        @Valid @NotNull AuthFailureThrottle authFailureThrottle,
         @Valid @NotNull CircuitBreaker circuitBreaker,
         @Valid @NotNull Security security) {
 
@@ -57,6 +60,13 @@ public record RateLimitProperties(
                               @NotNull Duration expireAfter,
                               @NotNull Duration negativeTtl,
                               @Positive long maxSize) {
+    }
+
+    /**
+     * Per-client budget for failed authentication attempts, kept in each instance's memory. Once a
+     * client runs out, its requests are rejected before any Redis lookup.
+     */
+    public record AuthFailureThrottle(@Positive long capacity, @Positive double refillPerSecond) {
     }
 
     public record CircuitBreaker(@Min(1) @Max(100) float failureRateThreshold,

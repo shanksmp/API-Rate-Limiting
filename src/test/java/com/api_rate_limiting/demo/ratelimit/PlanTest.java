@@ -37,4 +37,12 @@ class PlanTest {
                 new PlanProperties(Algorithm.SLIDING_WINDOW, 10, null, null, Duration.ofMillis(10))))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    /** Review finding 7: a period that rounds down to 0 ms must be rejected at startup. */
+    @Test
+    void rejectsSubMillisecondRefillPeriod() {
+        assertThatThrownBy(() -> Plan.from("bad",
+                new PlanProperties(Algorithm.TOKEN_BUCKET, 10, 10L, Duration.ofNanos(500_000), null)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

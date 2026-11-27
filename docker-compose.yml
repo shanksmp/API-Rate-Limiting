@@ -18,12 +18,13 @@ services:
     user: redis
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
-    # volatile-ttl: under memory pressure evict only keys with a TTL (rate limit buckets), never API keys
+    # noeviction: when memory is full, writes fail loudly (and the fail mode applies) instead of Redis
+    # quietly deleting buckets, which would hand clients a fresh quota. An alert fires well before that.
     command: >
       sh -c 'exec redis-server
       --requirepass "$$REDIS_PASSWORD"
       --appendonly yes --appendfsync everysec
-      --maxmemory 256mb --maxmemory-policy volatile-ttl
+      --maxmemory 256mb --maxmemory-policy noeviction
       --protected-mode yes'
     volumes:
       - redis-data:/data

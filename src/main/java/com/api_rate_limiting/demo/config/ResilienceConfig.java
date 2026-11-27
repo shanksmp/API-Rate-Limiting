@@ -16,6 +16,7 @@ public class ResilienceConfig {
     private static final Logger log = LoggerFactory.getLogger(ResilienceConfig.class);
 
     public static final String REDIS_BREAKER = "redis-rate-limiter";
+    public static final String API_KEY_LOOKUP_BREAKER = "redis-api-key-lookup";
 
     @Bean
     CircuitBreakerRegistry circuitBreakerRegistry(RateLimitProperties props, MeterRegistry meters) {
@@ -38,10 +39,19 @@ public class ResilienceConfig {
 
     @Bean
     CircuitBreaker rateLimiterCircuitBreaker(CircuitBreakerRegistry registry) {
-        CircuitBreaker breaker = registry.circuitBreaker(REDIS_BREAKER);
+        return logged(registry.circuitBreaker(REDIS_BREAKER));
+    }
+
+    /** Separate breaker for API key lookups, so an outage fails them fast instead of on timeouts. */
+    @Bean
+    CircuitBreaker apiKeyLookupCircuitBreaker(CircuitBreakerRegistry registry) {
+        return logged(registry.circuitBreaker(API_KEY_LOOKUP_BREAKER));
+    }
+
+    private static CircuitBreaker logged(CircuitBreaker breaker) {
         breaker.getEventPublisher().onStateTransition(e ->
-                log.warn("Redis circuit breaker {} -> {}", e.getStateTransition().getFromState(),
-                        e.getStateTransition().getToState()));
+                log.warn("Circuit breaker {}: {} -> {}", breaker.getName(),
+                        e.getStateTransition().getFromState(), e.getStateTransition().getToState()));
         return breaker;
     }
 }

@@ -22,6 +22,13 @@ groups:
         annotations:
           summary: p99 rate limit decision latency above 25ms
 
+      - alert: RedisMemoryHigh
+        expr: max(redis_memory_used_bytes / redis_memory_max_bytes) > 0.8
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: Redis above 80% of maxmemory; at 100% writes fail and the rate limiter falls back to its fail mode
+
       - alert: HighAuthFailureRate
         expr: sum(rate(ratelimiter_auth_failures_total[1m])) > 50
         for: 2m

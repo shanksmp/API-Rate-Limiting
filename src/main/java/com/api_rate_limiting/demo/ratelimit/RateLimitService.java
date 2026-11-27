@@ -10,6 +10,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.EnumMap;
@@ -32,7 +33,7 @@ public class RateLimitService {
     private final MeterRegistry meters;
 
     public RateLimitService(List<RateLimiter> limiters,
-                            CircuitBreaker rateLimiterCircuitBreaker,
+                            @Qualifier("rateLimiterCircuitBreaker") CircuitBreaker rateLimiterCircuitBreaker,
                             RateLimitProperties props,
                             MeterRegistry meters) {
         limiters.forEach(l -> this.limiters.put(l.algorithm(), l));

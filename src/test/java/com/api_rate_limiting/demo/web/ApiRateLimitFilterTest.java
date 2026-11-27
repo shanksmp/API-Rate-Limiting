@@ -27,6 +27,8 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -51,7 +53,7 @@ class ApiRateLimitFilterTest {
         PlanRegistry plans = new PlanRegistry(props);
         apiKeys = mock(ApiKeyService.class);
         rateLimits = mock(RateLimitService.class);
-        ApiRateLimitFilter filter = new ApiRateLimitFilter(apiKeys, plans, rateLimits,
+        ApiRateLimitFilter filter = new ApiRateLimitFilter(apiKeys, new AuthFailureThrottle(props), plans, rateLimits,
                 new ProblemWriter(new ObjectMapper()), props, new SimpleMeterRegistry());
         mvc = MockMvcBuilders.standaloneSetup(new DemoController(plans)).addFilters(filter).build();
     }
@@ -142,6 +144,41 @@ class ApiRateLimitFilterTest {
 
         mvc.perform(get("/api/hello").header("X-API-Key", SECRET))
                 .andExpect(status().isServiceUnavailable());
+    }
+
+    /** Review finding 2: random fake keys must not each cost a Redis lookup forever. */
+    @Test
+    void repeatedAuthFailuresAreThrottledBeforeAnyLookup() throws Exception {
+        when(apiKeys.authenticate(anyString())).thenReturn(Optional.empty());
+
+        // Test budget: 5 failures per client. Every attempt uses a different, well-formed fake key
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(get("/api/hello").header("X-API-Key", fakeKey(i)).with(fromAddress("203.0.113.7")))
+                    .andExpect(status().isUnauthorized());
+        }
+        mvc.perform(get("/api/hello").header("X-API-Key", fakeKey(99)).with(fromAddress("203.0.113.7")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().exists("Retry-After"))
+                .andExpect(jsonPath("$.detail").value("Too many failed authentication attempts"));
+        verify(apiKeys, times(5)).authenticate(anyString());
+
+        // Other clients are unaffected
+        when(apiKeys.authenticate(SECRET)).thenReturn(Optional.of(KEY));
+        when(rateLimits.check(eq(KEY.id()), any(Plan.class), anyInt()))
+                .thenReturn(new RateLimitDecision(Outcome.ALLOWED, 10, 9, 0, 6_000));
+        mvc.perform(get("/api/hello").header("X-API-Key", SECRET).with(fromAddress("198.51.100.1")))
+                .andExpect(status().isOk());
+    }
+
+    private static String fakeKey(int i) {
+        return "rlk_" + String.format("%043d", i);
+    }
+
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor fromAddress(String ip) {
+        return request -> {
+            request.setRemoteAddr(ip);
+            return request;
+        };
     }
 
     @Test

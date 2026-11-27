@@ -38,6 +38,8 @@ public final class TestProperties {
                 Map.of("free", new PlanProperties(Algorithm.TOKEN_BUCKET, 10, 10L, Duration.ofMinutes(1), null)),
                 new RateLimitProperties.ApiKeyCache(Duration.ofSeconds(30), Duration.ofMinutes(10),
                         Duration.ofSeconds(30), 1000),
+                Duration.ofDays(30),
+                new RateLimitProperties.AuthFailureThrottle(5, 1),
                 new RateLimitProperties.CircuitBreaker(50, 50, 20, Duration.ofSeconds(5), Duration.ofSeconds(1)),
                 new RateLimitProperties.Security(adminToken, pepper));
     }

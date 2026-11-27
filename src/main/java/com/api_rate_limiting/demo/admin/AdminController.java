@@ -2,10 +2,12 @@ package com.api_rate_limiting.demo.admin;
 
 import com.api_rate_limiting.demo.admin.AdminDtos.CreateKeyRequest;
 import com.api_rate_limiting.demo.admin.AdminDtos.IssuedKeyResponse;
+import com.api_rate_limiting.demo.admin.AdminDtos.KeyPageResponse;
 import com.api_rate_limiting.demo.admin.AdminDtos.KeyResponse;
 import com.api_rate_limiting.demo.admin.AdminDtos.PlanResponse;
 import com.api_rate_limiting.demo.admin.AdminDtos.UpdateKeyRequest;
 import com.api_rate_limiting.demo.apikey.ApiKey;
+import com.api_rate_limiting.demo.apikey.ApiKeyRepository;
 import com.api_rate_limiting.demo.apikey.ApiKeyService;
 import com.api_rate_limiting.demo.apikey.IssuedApiKey;
 import com.api_rate_limiting.demo.ratelimit.PlanRegistry;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -33,7 +36,7 @@ import java.util.List;
 public class AdminController {
 
     private static final Logger audit = LoggerFactory.getLogger("audit");
-    private static final int LIST_LIMIT = 1000;
+    private static final int MAX_PAGE_SIZE = 500;
 
     private final ApiKeyService apiKeys;
     private final PlanRegistry plans;
@@ -60,8 +63,16 @@ public class AdminController {
     }
 
     @GetMapping("/keys")
-    public List<KeyResponse> list() {
-        return apiKeys.list(LIST_LIMIT).stream().map(KeyResponse::of).toList();
+    public KeyPageResponse list(@RequestParam(required = false) String cursor,
+                                @RequestParam(defaultValue = "100") int limit) {
+        if (limit < 1 || limit > MAX_PAGE_SIZE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and " + MAX_PAGE_SIZE);
+        }
+        if (cursor != null && !ApiKeyService.ID_FORMAT.matcher(cursor).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid cursor");
+        }
+        ApiKeyRepository.Page page = apiKeys.list(cursor, limit);
+        return new KeyPageResponse(page.keys().stream().map(KeyResponse::of).toList(), page.nextCursor());
     }
 
     @GetMapping("/keys/{id}")

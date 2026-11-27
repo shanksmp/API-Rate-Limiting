@@ -19,8 +19,15 @@ public record Plan(String name, Algorithm algorithm, long capacity, double refil
                     throw new IllegalArgumentException(
                             "Plan '" + name + "': token-bucket needs refill-tokens > 0 and refill-period > 0");
                 }
-                yield new Plan(name, Algorithm.TOKEN_BUCKET, p.capacity(),
-                        p.refillTokens() / (double) p.refillPeriod().toMillis(), 0);
+                // The scripts work in milliseconds: a sub-millisecond period would become 0 ms and an infinite rate
+                if (p.refillPeriod().toMillis() < 1) {
+                    throw new IllegalArgumentException("Plan '" + name + "': refill-period must be at least 1ms");
+                }
+                double perMs = p.refillTokens() / (double) p.refillPeriod().toMillis();
+                if (!Double.isFinite(perMs) || perMs <= 0) {
+                    throw new IllegalArgumentException("Plan '" + name + "': refill rate is not a usable number");
+                }
+                yield new Plan(name, Algorithm.TOKEN_BUCKET, p.capacity(), perMs, 0);
             }
             case SLIDING_WINDOW -> {
                 if (!isPositive(p.window()) || p.window().toMillis() < 100) {
