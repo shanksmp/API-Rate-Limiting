@@ -1,0 +1,100 @@
+spring:
+  application:
+    name: api-rate-limiter
+  threads:
+    virtual:
+      enabled: true            # each request runs on a virtual thread, so waiting on Redis doesn't tie up a platform thread
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 250ms           # fail fast so the circuit breaker / fail mode can kick in
+      connect-timeout: 500ms
+  mvc:
+    problemdetails:
+      enabled: true            # RFC 9457 problem+json for MVC errors
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: 8080
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    whitelabel:
+      enabled: false
+  tomcat:
+    max-connections: 10000
+    accept-count: 1000
+    max-http-form-post-size: 16KB
+    max-swallow-size: 64KB
+
+management:
+  server:
+    port: 8081                 # actuator lives on its own port; never expose it publicly
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState   # stay ready when Redis is down: the limiter degrades instead
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+ratelimit:
+  api-key-header: X-API-Key
+  # Everything else needs a valid API key (default deny). /admin has its own bearer-token auth.
+  public-paths:
+    - /public/**
+    - /admin/**
+    - /actuator/**
+    - /error
+  fail-mode: open              # open: allow traffic when Redis is down. closed: reject with 503
+  default-plan: free
+  plans:
+    free:
+      algorithm: token-bucket
+      capacity: 10
+      refill-tokens: 10
+      refill-period: 1m
+    pro:
+      algorithm: token-bucket
+      capacity: 100
+      refill-tokens: 50
+      refill-period: 1s
+    partner:
+      algorithm: sliding-window
+      capacity: 1000
+      window: 1m
+    enterprise:                # effectively unlimited; used for throughput benchmarks
+      algorithm: token-bucket
+      capacity: 1000000
+      refill-tokens: 1000000
+      refill-period: 1s
+  api-key-cache:
+    refresh-after: 30s         # upper bound on how stale a key's plan/status can be if a pub/sub message is missed
+    expire-after: 10m          # how long a cached key survives a Redis outage
+    negative-ttl: 30s
+    max-size: 100000
+  circuit-breaker:
+    failure-rate-threshold: 50
+    sliding-window-size: 50
+    minimum-calls: 20
+    open-duration: 5s
+    slow-call-threshold: 1s
+  security:
+    admin-token: ${ADMIN_TOKEN:}
+    api-key-pepper: ${API_KEY_PEPPER:}

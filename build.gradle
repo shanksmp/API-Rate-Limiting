@@ -5,18 +5,12 @@ plugins {
 }
 
 group = 'com.api-rate-limiting'
-version = '0.0.1-SNAPSHOT'
-description = 'API Rate Limiting project'
+version = '1.0.0'
+description = 'Distributed API rate limiter built on Spring Boot and Redis'
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
-	}
-}
-
-configurations {
-	compileOnly {
-		extendsFrom annotationProcessor
+		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
 
@@ -24,21 +18,41 @@ repositories {
 	mavenCentral()
 }
 
+ext {
+	resilience4jVersion = '2.2.0'
+}
+
 dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	compileOnly 'org.projectlombok:lombok'
-	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'com.github.ben-manes.caffeine:caffeine'
+	implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4jVersion}"
+	implementation "io.github.resilience4j:resilience4j-micrometer:${resilience4jVersion}"
 	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
-	implementation 'com.fasterxml.jackson.core:jackson-databind'
 
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.awaitility:awaitility'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+	testLogging {
+		events 'failed', 'skipped'
+		exceptionFormat 'full'
+	}
+}
+
+// Only build the executable Spring Boot jar
+tasks.named('jar') {
+	enabled = false
+}
+
+// `./gradlew bootRun` uses the "local" profile (dev-only secrets) unless told otherwise
+tasks.named('bootRun') {
+	environment 'SPRING_PROFILES_ACTIVE', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local'
 }

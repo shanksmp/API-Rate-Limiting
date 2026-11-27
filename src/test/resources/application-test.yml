@@ -1,0 +1,14 @@
+ratelimit:
+  plans:
+    strict:
+      algorithm: token-bucket
+      capacity: 3
+      refill-tokens: 1
+      refill-period: 1h
+    strict-window:
+      algorithm: sliding-window
+      capacity: 3
+      window: 1h
+  security:
+    admin-token: test-admin-token-0123456789abcdef0123
+    api-key-pepper: test-pepper-0123456789abcdef0123456789

@@ -1,1 +1,6 @@
-rootProject.name = 'demo'
+plugins {
+	// Lets Gradle download the JDK toolchain from build.gradle if it isn't installed
+	id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
+}
+
+rootProject.name = 'api-rate-limiter'

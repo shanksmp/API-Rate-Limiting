@@ -2,8 +2,10 @@ package com.api_rate_limiting.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
+@ConfigurationPropertiesScan
 public class ApiRateLimiterApplication {
 
 	public static void main(String[] args) {

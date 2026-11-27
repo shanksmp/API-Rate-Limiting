@@ -1,0 +1,148 @@
+# Full local stack: NGINX -> N stateless app instances -> Redis, with Prometheus + Grafana.
+#   ./scripts/init-env.sh && docker compose up -d --build
+# Only NGINX (8080), Grafana (3000) and Prometheus (9090) are published, and only on localhost.
+
+name: rate-limiter
+
+x-app-security: &hardened
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    <<: *hardened
+    user: redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    # volatile-ttl: under memory pressure evict only keys with a TTL (rate limit buckets), never API keys
+    command: >
+      sh -c 'exec redis-server
+      --requirepass "$$REDIS_PASSWORD"
+      --appendonly yes --appendfsync everysec
+      --maxmemory 256mb --maxmemory-policy volatile-ttl
+      --protected-mode yes'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [backend]
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: api-rate-limiter:latest
+    <<: *hardened
+    tmpfs:
+      - /tmp
+    environment:
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:?set API_KEY_PEPPER in .env}
+    deploy:
+      replicas: ${APP_REPLICAS:-3}
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1g
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [backend]
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/public/ping"]   # localhost would resolve to ::1, which NGINX does not listen on
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks: [backend]
+    restart: unless-stopped
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [backend]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+      - --web.enable-remote-write-receiver   # lets k6 push load-test metrics
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [backend]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/rate-limiter.json
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus]
+    networks: [backend]
+    restart: unless-stopped
+
+  # docker compose --profile loadtest run --rm k6 run /scripts/throughput.js
+  k6:
+    image: grafana/k6:0.54.0
+    profiles: [loadtest]
+    environment:
+      BASE_URL: http://nginx:8080
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(50),p(95),p(99),max
+    volumes:
+      - ./loadtest/k6:/scripts:ro
+      - ./loadtest/results:/results
+    networks: [backend]
+
+networks:
+  backend: {}
+
+volumes:
+  redis-data: {}
+  prometheus-data: {}
+  grafana-data: {}

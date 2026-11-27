@@ -1,0 +1,5 @@
+# Local development only (`./gradlew bootRun` turns this profile on). NEVER use these values anywhere else.
+ratelimit:
+  security:
+    admin-token: ${ADMIN_TOKEN:local-dev-admin-token-change-me-0000}
+    api-key-pepper: ${API_KEY_PEPPER:local-dev-pepper-change-me-000000000000}
