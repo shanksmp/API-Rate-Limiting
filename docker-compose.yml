@@ -51,7 +51,7 @@ services:
       resources:
         limits:
           cpus: "1.5"
-          memory: 768m
+          memory: 1g
     depends_on:
       redis:
         condition: service_healthy
@@ -75,7 +75,7 @@ services:
       app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/public/ping"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/public/ping"]   # localhost would resolve to ::1, which NGINX does not listen on
       interval: 10s
       timeout: 3s
       retries: 3

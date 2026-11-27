@@ -140,6 +140,10 @@ without the limiter.
 - **Correctness under load:** `correctness.js` sends 300 requests at once with one `free` key. NGINX spreads them over all 3 instances (about 100 each), and exactly 10 succeed.
 - **Redis outage under load:** at 2,000 req/s, Redis was stopped for 15s, then started again. All requests returned 200, p99 stayed at 1.7 ms, and 0 errors were reported. Each instance's breaker opened within a second, probed every 5s, and closed once Redis was back.
 
+**Warm up first.** Right after a restart the JVMs haven't JIT-compiled the hot path yet. A
+20k run on cold JVMs reached only 14k req/s with p99 over 1 s; the same run a minute later
+reached 19.8k req/s. Run a short load at low rate before measuring.
+
 Reproduce:
 
 ```bash
